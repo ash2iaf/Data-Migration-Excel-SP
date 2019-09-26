@@ -1,0 +1,123 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using Microsoft.Office.Interop.Excel;
+using System.Runtime.InteropServices;
+using Microsoft.ProjectServer.Client;
+using Microsoft.SharePoint.Client;
+using System.Security;
+using System.Data;
+using Excel = Microsoft.Office.Interop.Excel;
+using System.Data.OleDb;
+using Dtable = System.Data;
+using System.Data.SqlClient;
+
+namespace MigrationUtility
+{
+    class ReadExcel
+    {
+        public static void ReadSPList()
+        {
+            string UName = "projectonlinepremium@projectonlinepremium.onmicrosoft.com";
+            string Password = "password321@";
+            using (ClientContext context = new ClientContext("https://projectonlinepremium.sharepoint.com/sites/pwa"))
+            {
+                SecureString securePassword = new SecureString();
+                foreach (char c in Password.ToString().ToCharArray()) securePassword.AppendChar(c);
+                context.Credentials = new SharePointOnlineCredentials(UName, securePassword);
+
+                List list = context.Web.Lists.GetByTitle("ECF");
+                context.Load(list);
+                context.ExecuteQuery();
+                View view = list.Views.GetByTitle("All Items");
+
+                context.Load(view);
+                context.ExecuteQuery();
+                CamlQuery query = new CamlQuery();
+                query.ViewXml = view.ViewQuery;
+
+                ListItemCollection items = list.GetItems(query);
+                context.Load(items);
+                context.ExecuteQuery();
+                Console.WriteLine("Total Count: " + items.Count);
+
+                foreach (ListItem itm in items)
+                {
+                    string projname = Convert.ToString(itm["ProjectName"]);
+                    InsertintoSQL(projname);
+                }
+            }
+        }
+        public static void InsertintoSQL(string ProjectName)
+        {
+            SqlConnection con = new SqlConnection(@"Data Source=PUNITP375605D;Initial Catalog=MobileApp;Integrated Security=True");
+            SqlCommand cmd = new SqlCommand("insert into Students(Name) values('" + ProjectName + "')", con);
+            cmd.CommandType = CommandType.Text;
+            cmd.Parameters.AddWithValue("@Name", ProjectName);
+
+            con.Open();
+            int i = cmd.ExecuteNonQuery();
+
+            con.Close();
+        }
+        public static void ReadExcelFile()
+        {
+            try
+            {
+               
+                string fileName = "D:\\Anil Data\\Toll\\data migration\\R3822h - MyToll FY19 Releases - Copy.xlsx";
+               
+                #region Read Excel and Convert in Data table
+                Dtable.DataTable dt_TaskData = ConvertExcelToDataTable(fileName, "TaskData$");
+                DataView view = new DataView(dt_TaskData);
+                Dtable.DataTable dt_DistinctProject = view.ToTable(true, "Project Name");
+
+            }
+            catch (Exception ex)
+            {
+
+                Logger.WriteLog("ReadExcelFile method Main try catch exception: " + ex.Message);
+            }
+            #endregion
+        }
+        public static Dtable.DataTable ConvertExcelToDataTable(string FileName, string SheetName)
+        {
+
+            Dtable.DataTable dtResult = null;
+
+            using (OleDbConnection objConn = new OleDbConnection(@"Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" + FileName + ";Extended Properties='Excel 12.0;HDR=YES;IMEX=1;';"))
+            {
+                try
+                {
+                    objConn.Open();
+                    OleDbCommand cmd = new OleDbCommand();
+                    OleDbDataAdapter oleda = new OleDbDataAdapter();
+                    DataSet ds = new DataSet();
+                    Dtable.DataTable dt = objConn.GetOleDbSchemaTable(OleDbSchemaGuid.Tables, null);
+                    string sheetName = string.Empty;
+                   
+                    cmd.Connection = objConn;
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandText = "SELECT * FROM [" + SheetName + "]";
+                    oleda = new OleDbDataAdapter(cmd);
+                    oleda.Fill(ds, SheetName);
+                    dtResult = ds.Tables[SheetName];
+                    objConn.Close();
+                }
+
+                catch (Exception ex)
+                {
+                    Logger.WriteLog(ex.Message);
+                }
+                return dtResult; //Returning Dattable
+                                 // return ds;
+            }
+
+        }
+
+
+
+    }
+}
